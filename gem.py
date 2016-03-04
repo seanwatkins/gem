@@ -1,0 +1,391 @@
+#!/usr/bin/env python
+
+import socket
+import time
+import select
+import json
+import sys
+import struct
+import signal
+import rrdtool
+import logging
+
+from gs import *
+from array import *
+from Mcaster import *
+
+#LOGGING=CRITICAL,ERROR,WARNING,INFO,DEBUG
+loggingLevel=logging.INFO
+logFilePath="/tmp/gem.log"
+
+
+class powerusage(object):
+
+    def __init__ (self):
+        self.aValues = [None]*64
+        self.total = 0
+
+        self.temp1 = 0.0
+        self.temp2 = 0.0
+        self.temp3 = 0.0
+        self.temp4 = 0.0
+        self.temp5 = 0.0
+
+        self.gs = GSU()
+
+        for i in range(0,64):
+            self.aValues[i] = 0.0
+
+
+    def config(self):
+        pass
+
+    def connect(self):
+   
+        self.s = tcpSocket()
+        self.s.connect ("10.0.69.8", 2101)
+
+        self.mc = Mcaster ("239.139.0.2", 5000, 1)
+
+
+    def parse (self, v):
+
+        # we are passed like a1=22
+
+        s = v.split("=")
+        i = int(s[0][2:len(s[0])])
+        n = int(s[1])
+
+        logging.debug ( "i = %d n = %d" % (i, n))
+        self.aValues[i] = n
+
+    def calculate(self):
+
+        self.total = self.aValues[3] + self.aValues[6]
+
+    def writeCactiFile(self):
+
+        
+        s = ""
+        for i in range (1,32):
+            ns = "p%d:%d " % (i, self.aValues[i])
+            s = s + ns
+
+        s = s + "total:%d\n" % (self.total)
+
+        try:
+
+            of = open ("/tmp/gemdata", "w")
+            of.write (s)
+            of.close()
+
+        except:
+            logging.error("Cannot write gem datafile")
+
+    
+
+    def sendToGS(self):
+
+
+        try:
+            
+            self.gs.sendData ({ 'compId': 'GreenEyeMonitor', 
+                    'computers': self.aValues[26],
+                    'furnace': self.aValues[28],
+                    'aquaponics': self.aValues[30],
+                    'total': self.total,
+                    'tempBasement': self.temp1,
+                    'tempMainfloor': self.temp2})
+
+        except:
+
+            logging.error("Failed to send data to GS")
+
+
+
+
+        
+
+    def updateRrdtool(self):
+
+        s = "N:%d:%2.2f:%2.2f:%2.2f:%2.2f:%d.0:%d.0" % (self.total, self.temp1, self.temp2, self.temp3, self.temp4, self.aValues[28], self.aValues[26])
+
+        try:
+
+            rrdtool.update ('/local/projects/gem/powertemp.rrd', s)
+
+        except e:
+
+            logging.error ("Could not write powertemp rrd!" + str(e))
+
+
+    def dump(self):
+
+        self.calculate()
+
+        # clear the screen
+        print chr(27) + "[2J"
+        print chr(27) + "[H"
+
+        print "Temp1=%2.1f Temp2=%2.1f Temp3=%2.1f Temp4=%2.1f" % (
+            self.temp1, self.temp2, self.temp3, self.temp4)
+
+        print "Total Power = %d W" % self.total
+        print "                  L1  %03d" % self.aValues[1]
+        print "                  L2  %03d" % self.aValues[2]
+
+        for i in xrange(3,31,2):
+            print "   L%2d  %03d       L%2d  %03d" % (i,self.aValues[i], i+1, self.aValues[i+1])
+
+    def getJsonString(self):
+
+        data = [ self.total, self.aValues, self.temp1, self.temp2, self.temp3, self.temp4]
+
+        jsonString = json.dumps (data)
+        return jsonString
+
+    def setJsonString(self, s):
+
+        [self.total, self.aValues, self.temp1, self.temp2, self.temp3, self.temp4] = json.loads (s)
+
+
+
+    def interactWithGEM(self):
+
+
+        # First, lets see if we can get some data from the other side
+        rlist, wlist, elist = select.select ([self.s.sock], [], [], 60)
+
+        volts = 0.0
+
+        if len(rlist) == 0:
+            #            print "we should poll the device!"
+            #            print "%c[2J" % (27)
+            logging.info ( "Polling!")
+            #self.s.send("^^^APIVAL")
+
+        else:
+            r = self.s.get()
+            if len(r) > 0:
+#                print "Received: ", r
+                self.cs = self.cs + r
+                if "\n" in r:
+
+#                    print "there is a new line in there"
+#                    print "the full string is ", self.cs
+
+                    i = 1
+                    vl = self.cs.split("&")
+                    for v in vl:
+                        # so we have string like x=y 
+
+                        # if it starts with v, then thats volts
+                        if v.startswith("v"):
+                            volts = float(v[2:])
+#                            print "Volts = %3.2f" % volts
+
+                        # amps
+                        if v.startswith("p"):
+#                            print "V=%s" % v
+                            ss = v.split ("=")
+                            breakerstringunder = ss[0].split("_")
+                            breakerstring = breakerstringunder[1]
+                            #print "Breakerstring %s" % breakerstring
+                            breakerno = int(breakerstring)
+                            self.aValues[breakerno] = float(ss[1])
+#                            print "Breaker %d watts %3.2f" % (breakerno, self.aValues[breakerno])
+
+                        # temp
+                        if v.startswith("t"):
+ #                           print "V=%s" % v
+                            ss = v.split ("=")
+                            tno = ss[0].split("_")
+
+                            try:
+                            
+                         
+                                temp = float (ss[1])
+                                if tno[1] == "1":
+                                    self.temp1 = temp
+                                if tno[1] == "2":
+                                    self.temp2 = temp
+                                if tno[1] == "3":
+                                    self.temp3 = temp
+
+                            except:
+
+                                logging.debug ( "Couldn't convert %s" % v)
+                                
+
+                                 
+                    self.cs = ""
+                    self.sendEveryone()
+
+
+
+    def sendEveryone(self):
+#        self.dump()
+        self.calculate()
+        s = self.getJsonString()
+        self.mc.send(s)
+        self.writeCactiFile()
+        self.updateRrdtool()
+        self.sendToGS()
+
+
+    def run(self):
+
+# States
+# INIT = 0
+# CONNECTING = 1
+# RUNNING = 2
+# ERROR = 3
+# QUIT = 99
+
+        state = 0
+        connectingErrorTime = 0
+        error = 0
+
+        self.cs = ""
+
+        while state != 99:
+
+            logging.debug ( "run - state = %d" % state)
+
+            if state == 0:
+                self.config()
+                state = state + 1
+            elif state == 1:
+
+                if connectingErrorTime  == 0:
+                 
+                    try:
+
+                        self.connect()
+                        state = state + 1
+                        error = 0
+
+                    except: 
+
+                        if error != 1:
+                            logging.debug( "Some error connecting to server. waiting another 60 seconds")
+                            error = 1
+                        connectingErrorTime = time.time() + 60
+                        time.sleep(60)
+                        
+                else:
+
+                    if time.time() > connectingErrorTime:
+                        connectingErrorTime = 0
+                    
+                    
+                    
+            elif state == 2:
+               try:
+                   self.interactWithGEM()
+               except socket.error as serr:
+                   state = 3
+
+            elif state == 3:
+                self.disconnect()
+                state = 1
+
+    def disconnect(self):
+        logging.info ( "Socket disconnect")
+        self.s.disconnect()
+
+    def shutdown(self):
+        logging.info ( "Shutting down!")
+        self.disconnect()
+
+        
+
+
+class tcpSocket(object):
+
+
+    def __init__ (self, sock=None):
+        if sock is None:
+            self.sock = socket.socket (socket.AF_INET, socket.SOCK_STREAM)
+
+        else:
+            self.sock = sock
+
+    def connect (self, host, port):
+        self.sock.connect ((host, port))
+#        self.sock.setblocking(0)
+
+    def disconnect (self):
+     #   self.sock.shutdown(SHUT_RDWR)
+        self.sock.close()
+
+    def send (self, msg):
+        self.sock.send (msg)
+
+    def get (self):
+
+        data = None
+
+#        try:
+
+        data = self.sock.recv (2048)
+        
+#        except:
+
+#            self.disconnect()
+#            self.connect()
+
+
+        return data
+
+
+
+def signalHandler (signal, frame):
+    logging.info ( "Signal received, exiting")
+    pu.shutdown()
+    sys.exit(0)
+
+
+if __name__ == "__main__":
+
+    # Change Program Name
+    sys.argv[0] = 'gem.py'
+
+######### Enable Logging ###############
+    logging.basicConfig(level=loggingLevel,
+                    format='%(asctime)s %(levelname)-8s %(message)s',
+                    datefmt='%a, %d %b %Y %H:%M:%S',
+                    filename=logFilePath,
+                    filemode='a')
+
+
+
+    logging.info ("Starting gem power monitor watcher")
+
+    signal.signal(signal.SIGINT, signalHandler)
+
+    pu = powerusage()
+    pu.run()
+
+
+
+    
+
+
+
+
+
+        
+            
+
+
+        
+        
+        
+
+
+
+
+
+        
+
