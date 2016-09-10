@@ -17,6 +17,7 @@ class GSU(object):
         self.api_key = "0e7249e2-7420-3a97-8987-d7a6f248d5de"    #Change This!!!
         self.component_id = "GreenEyeMonitor"
         self.base_url = "/api/feed?"
+	self.nextSendTime = 0.0
 
         self.headers = {"Connection" : "close", "Content-type": "application/json", 
                        "Cookie" : "api_key="+ self.api_key}
@@ -25,6 +26,16 @@ class GSU(object):
 
 
     def sendData (self, data):
+
+	if self.nextSendTime < time():
+		return
+
+	self.nextSendTime = time.time() + 15*60
+
+
+	logging.debug ("Next time to send is in 15 minutes")
+
+
 
         try:
 

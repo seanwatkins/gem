@@ -189,6 +189,9 @@ class powerusage(object):
                                     self.temp2 = temp
                                 if tno[1] == "3":
                                     self.temp3 = temp
+								if tno[1] == "4":
+									self.temp4 = temp
+
 
                             except:
 
