@@ -9,6 +9,10 @@ import struct
 import signal
 import rrdtool
 import logging
+import paho.mqtt.client as mqtt
+import jsonpickle
+
+
 
 from gs import *
 from array import *
@@ -33,6 +37,8 @@ class powerusage(object):
 
         self.gs = GSU()
 
+	self.mqttclient = mqtt.Client("gem.py")
+
         for i in range(0,64):
             self.aValues[i] = 0.0
 
@@ -46,6 +52,7 @@ class powerusage(object):
         self.s.connect ("10.0.69.8", 2101)
 
         self.mc = Mcaster ("239.139.0.2", 5000, 1)
+	self.mqttclient.connect("10.0.69.63")
 
 
     def parse (self, v):
@@ -71,7 +78,8 @@ class powerusage(object):
             ns = "p%d:%d " % (i, self.aValues[i])
             s = s + ns
 
-        s = s + "total:%d\n" % (self.total)
+	s = s + "total:%d " % (self.total)
+        s = s + "temp1:%3.2f temp2:%3.2f temp3:%3.2f temp4:%3.2f\n" % (self.temp1, self.temp2, self.temp3, self.temp4)
 
         try:
 
@@ -80,7 +88,60 @@ class powerusage(object):
             of.close()
 
         except:
+
             logging.error("Cannot write gem datafile")
+
+	
+
+    def sendMqttUptime(self):
+
+	uptime=int(time.time())
+	self.mqttclient.publish("gem.py/uptime", uptime)
+
+    def sendMqttData(self):
+
+	logging.info("sendMqtt entry")
+
+	data = {}
+
+	data['tstamp'] = int(time.time())
+
+
+	data['total'] = self.total
+	data['temp1'] = self.temp1
+	data['temp2'] = self.temp2
+	data['temp3'] = self.temp3
+
+
+	values = {}
+
+	for i in range (1,32):
+
+		values[i] = self.aValues[i]
+
+#		dl = "p%d" % i
+#       		dv = "%d" % (self.aValues[i])
+
+
+	data['values'] = values
+
+	logging.info (data)
+#	json_data = json.dumps(self)
+	json_data =  jsonpickle.encode(data)
+
+
+	logging.info("sending this json data to mqtt")
+	logging.info (json_data)
+
+	self.mqttclient.publish("gem.py/data", json_data )
+	self.mqttclient.publish("gem.py/total", self.total)
+	self.mqttclient.publish("gem.py/temp1", self.temp1)
+	self.mqttclient.publish("gem.py/temp2", self.temp2)
+	self.mqttclient.publish("gem.py/temp3", self.temp3)
+	self.mqttclient.publish("gem.py/temp4", self.temp4)
+
+
+	logging.info("sendMqtt exit")
 
     
 
@@ -108,7 +169,7 @@ class powerusage(object):
 
     def updateRrdtool(self):
 
-        s = "N:%d:%2.2f:%2.2f:%2.2f:%2.2f:%d.0:%d.0" % (self.total, self.temp1, self.temp2, self.temp3, self.temp4, self.aValues[28], self.aValues[26])
+        s = "N:%d:%2.2f:%2.2f:%2.2f:%2.2f:%d.0:%d.0" % (self.total, self.temp1, self.temp3, self.temp2, self.temp4, self.aValues[28], self.aValues[26])
 
         try:
 
@@ -134,8 +195,7 @@ class powerusage(object):
         print "                  L1  %03d" % self.aValues[1]
         print "                  L2  %03d" % self.aValues[2]
 
-        for i in xrange(3,31,2):
-            print "   L%2d  %03d       L%2d  %03d" % (i,self.aValues[i], i+1, self.aValues[i+1])
+
 
     def getJsonString(self):
 
@@ -154,15 +214,18 @@ class powerusage(object):
 
 
         # First, lets see if we can get some data from the other side
-        rlist, wlist, elist = select.select ([self.s.sock], [], [], 60)
+        rlist, wlist, elist = select.select ([self.s.sock], [], [], 1)
 
         volts = 0.0
 
         if len(rlist) == 0:
             #            print "we should poll the device!"
             #            print "%c[2J" % (27)
-            logging.info ( "Polling!")
+            #logging.info ( "Polling!")
             #self.s.send("^^^APIVAL")
+
+			# Every 60 seconds, send uptime
+			self.sendMqttUptime()
 
         else:
             r = self.s.get()
@@ -226,14 +289,20 @@ class powerusage(object):
 
 
 
+
+
     def sendEveryone(self):
-#        self.dump()
+
+	#logging.info("Sending data out..")
+        #self.dump()
         self.calculate()
         s = self.getJsonString()
         self.mc.send(s)
         self.writeCactiFile()
         self.updateRrdtool()
-        self.sendToGS()
+
+	self.sendMqttData()
+#        self.sendToGS()
 
 
     def run(self):

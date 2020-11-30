@@ -1,0 +1,73 @@
+#!/bin/sh
+
+##--lower-limit -30 
+#--alt-autoscale-max 
+
+createGraph () {
+DS=$1
+START=$2
+UNITS=$3
+
+#echo "DS = $DS"
+#echo "Start = $START"
+#echo "Units = $UNITS"
+
+rrdtool graph ~/public_html/gem/$DS-$START.png \
+--start "$START" --width 900 --height 500 --end now --slope-mode \
+--vertical-label "$UNITS" \
+DEF:$DS=powertemp.rrd:$DS:AVERAGE \
+LINE3:$DS#0000FF:"Average"
+
+
+rrdtool graph ~/public_html/gem/$DS-$START-small.png \
+--start "$START" --width 400 --height 300 --end now --slope-mode \
+--vertical-label "$UNITS" \
+DEF:$DS=powertemp.rrd:$DS:AVERAGE \
+LINE3:$DS#0000FF:"Average"
+
+}
+
+createTempGraph() {
+START=$1
+
+rrdtool graph ~/public_html/gem/temp-"$START".png \
+--title 'Temps at 3511 Spruce Drive' \
+--start "$START" --width 1500 --height 768 --end now --slope-mode \
+--vertical-label 'C' \
+DEF:TempMain=powertemp.rrd:TempMain:AVERAGE \
+DEF:TempBasement=powertemp.rrd:TempBasement:AVERAGE \
+DEF:TempOutside=powertemp.rrd:TempOutside:AVERAGE \
+DEF:TempBedroom=powertemp.rrd:TempBedroom:AVERAGE \
+LINE1:TempMain#000000:TempMain \
+LINE2:TempBasement#000000:TempBasement \
+LINE3:TempOutside#00FFFF:TempOutside \
+LINE4:TempBedroom#0000FF:TempBedroom
+}
+
+cd /local/projects/gem
+
+createGraph "TempBedroom" "end-7d" "C"
+createGraph "TempBasement" "end-24h" "C"
+
+createGraph "TempMain" "end-24h" "C"
+createGraph "TempBedroom" "end-24h" "C"
+
+createGraph "TotalPower" "end-1d" "Kw"
+createGraph "TotalPower" "end-7d" "Kw"
+createGraph "TotalPower" "end-21d" "Kw"
+
+createGraph "TempBasement" "end-7d" "C"
+createGraph "TempMain" "end-7d" "C"
+createGraph "TempBedroom" "end-7d" "C"
+createGraph "TempOutside" "end-7d" "C"
+createGraph "TempOutside" "end-60d" "C"
+
+createTempGraph "end-7d"
+createTempGraph "end-180d"
+
+#createGraph "furnace" "end-7d" "Kw"
+#createGraph "furnace" "end-1d" "Kw"
+createGraph "computers" "end-1d" "Kw"
+createGraph "computers" "end-7d" "Kw"
+#createGraph "computers" "end-1d" "Kw"
+

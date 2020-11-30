@@ -1,0 +1,5 @@
+#!/usr/bin/env python
+
+import rrdtool
+
+rrdtool.update ('/share/sean/public_html/hm/powertemp.rrd', 'N:1000:20.0:21:21:22')

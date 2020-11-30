@@ -1,0 +1,5 @@
+#!/bin/sh
+
+TOP=/local/projects/gem
+
+$TOP/btmon.py -c $TOP/collector.cfg  --reverse-polarity=REVERSE_POLARITY --debug

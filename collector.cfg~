@@ -1,0 +1,31 @@
+[source]
+device_type=gem
+ip_mode=client
+ip_read=true
+ip_host=10.0.69.19
+ip_port=80
+ip_poll_interval=10
+#[sqlite]
+#sqlite_out = true
+#sqlite_insert_period=10
+[mysql]
+mysql_out = true
+mysql_host     = localhost
+mysql_user     = sean
+mysql_passwd   = 5716
+mysql_insert_period = 10
+[seg]
+smartenergygroups_out = true
+seg_token = 4d6fa405034688a 
+seg_upload_period = 45
+[rrd]
+rrd_out = true
+rrd_dir = /local/projects/gem/rrd
+#rrd_step=10
+#rrd_heartbeat=60
+#rrd_update_period=10
+#rrd_insert_period = 30
+
+
+
+

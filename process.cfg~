@@ -1,0 +1,13 @@
+[source]
+device_type = gem
+sqlite_read = true
+sqlite_src_table=ecm.db
+sqlite_src_file=gem48ptbin_counters
+sqlite_poll_interval=10
+[seg]
+smartenergygroups_out = true
+seg_token = 4d6fa405034688a 
+[rrd]
+rrd_out = true
+rrd_dir = /local/projects/gem/rrd
+

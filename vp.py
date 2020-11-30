@@ -73,7 +73,7 @@ class breakerpanel (object):
         self.breakers[14].description = "Lights"
         self.breakers[19].description = "Kitchen Table"
         self.breakers[20].description = "Dishwasher"
-        self.breakers[21].description = "Lights"
+        self.breakers[21].description = "Living Room"
         self.breakers[22].description = "Dryer"
         self.breakers[23].description = "Basement Theatre"
         self.breakers[25].description = "Lights"
@@ -145,7 +145,7 @@ if __name__ == "__main__":
         bp.sortedUsage()
 
         print "Basement=%2.1f Main=%2.1f Upstairs=%2.1f Outside=%2.1f" % (
-            p.temp1, p.temp2, p.temp3, p.temp4)
+            p.temp1, p.temp3, p.temp2, p.temp4)
 
 
         print "Total Watts = %d" % (bp.totalWatts)
